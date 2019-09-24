@@ -5,9 +5,8 @@ const swaggerDefinition = {
     version: '1.0.0',
     description: 'Demonstrating RESTful API',
   },
-  host: 'localhost:5000',
+  host: require('./keys').backendHost,
   basePath: '/',
 };
-
 
 module.exports = swaggerDefinition;

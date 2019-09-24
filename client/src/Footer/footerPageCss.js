@@ -1,7 +1,7 @@
 export const background = {
-	backgroundColor: 'black',
+    backgroundColor:'#212121',
 	width: '100%',
-	height: '170px',
+	height: '200px',
 	marginTop: '30px',
 };
 
@@ -22,10 +22,9 @@ export const containerDiv = {
 };
 
 export const footerWord = {
-	width: 'auto',
-	height: 'auto',
 	color: 'white',
-	display: 'flex',
 	alignItems: 'center',
 	justifyContent: 'center',
+	fontSize:'20px',
+
 };

@@ -1,14 +1,25 @@
-const defaultDate = {
-	// booksCategory: '5b69933780422c14325872a7',
-	mainCategories: 'Computers & Technology',
-	subCategories: 'Databases & Big Data',
+const initialData = {
+	name: {
+		mainCategories: 'All',
+		subCategories: '',
+	},
+	allCategories: [],
+	booksInCategories: [],
 };
 
-export default (state = { name: defaultDate }, action) => {
+export default (state = initialData, action) => {
 	switch (action.type) {
 	case 'SELECT_CATEGORY':
 		return {
-			name: action.name,
+			...state, name: action.name,
+		};
+	case 'INITIAL_ALL_CATEGORIES':
+		return {
+			...state, allCategories: [...action.allCategories],
+		};
+	case 'SET_BOOKS_IN_CATEGORIES':
+		return {
+			...state, booksInCategories: [...action.booksInCategories.books],
 		};
 	default:
 		return state;

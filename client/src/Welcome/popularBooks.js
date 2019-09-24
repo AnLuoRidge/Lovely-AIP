@@ -10,8 +10,8 @@ export default class PopularBooks extends Component {
 				{this.props.bookList.map(obj => (
 					<div key={obj._id || obj.id} style={{ marginTop: '5px' }}>
 						<h3>{obj.title || obj.name}</h3>
-						<hr />
-						<Row books={obj.books}/>
+						<hr/>
+						<Row currentBookId={this.props.currentBookId} books={obj.books}/>
 					</div>
 				))}
 			</div>

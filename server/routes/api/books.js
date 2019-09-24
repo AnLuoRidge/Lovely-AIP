@@ -1,13 +1,25 @@
 const express = require('express');
 const passport = require('passport');
+const ISBN = require('isbnjs');
 
 const Book = require('../../models/Book');
+const BookList = require('../../models/BookList');
 const Category = require('../../models/Category');
 const User = require('../../models/User');
 const Review = require('../../models/Review');
 const cleanCache = require('../../middlewares/cleanCache');
-const { clearHash } = require('../../config/cache');
-const isStaff = require('../../utils/isStaff');
+const { clearHash, clearAll } = require('../../config/cache');
+const {
+  booknotfound,
+  bookoutofpages,
+  bookexisted,
+  categorynotfound,
+  notsuccess,
+  reviewexist,
+  reviewnotfound,
+  success,
+  unauthorized
+} = require('../../config/errMessage');
 
 // Validation
 const validateBookInput = require('../../validation/book');
@@ -52,12 +64,21 @@ router.get('/test', (req, res) => res.json({
 router.get('/', async (req, res) => {
   try {
     const books = await Book.find()
+      .select({
+        title: 1,
+        authors: 1,
+        isbn: 1
+      })
       .sort({ date: -1 });
-    return res.json(books);
+    if (books) {
+      return res.json(books);
+    }
   } catch (err) {
     return res.status(404)
-      .json({ booknotfound: 'No books found' });
+      .json(booknotfound);
   }
+  return res.status(404)
+    .json(booknotfound);
 });
 
 /**
@@ -67,7 +88,7 @@ router.get('/', async (req, res) => {
  *     tags:
  *       - Book
  *     summary: Get books with condition
- *     description: Get books with condition. e.g.http://localhost:5000/api/books/list?page=2&pageSize=10&price=-1&publish
+ *     description: Get books with condition. e.g.http://localhost:5000/api/books/list?page=2&pageSize=10&price=-1&publish=1
  *     produces:
  *       - application/json
  *     parameters:
@@ -119,11 +140,24 @@ router.get('/list', async (req, res) => {
       .skip(interval)
       .limit(pageSize)
       .sort(sortParams)
-      .cache();
-    return res.json(books);
+      .cache()
+      .lean();
+    // Count all the books
+    const counts = await Book.countDocuments({});
+    const totalPages = Math.ceil(counts / pageSize);
+    if (page > totalPages) {
+      return res.status(404)
+        .json(bookoutofpages);
+    }
+
+    const result = {};
+    result.currentPage = page;
+    result.totalPages = totalPages;
+    result.books = books;
+    return res.json(result);
   } catch (err) {
     return res.status(404)
-      .json({ booknotfound: 'No books found' });
+      .json(booknotfound);
   }
 });
 
@@ -193,7 +227,7 @@ router.get('/:id', async (req, res) => {
     return res.json(book);
   } catch (err) {
     return res.status(404)
-      .json({ booknotfound: 'No books found' });
+      .json(booknotfound);
   }
 });
 
@@ -226,7 +260,7 @@ router.get('/slug/:slug', async (req, res) => {
     return res.json(book);
   } catch (err) {
     return res.status(404)
-      .json({ booknotfound: 'No books found' });
+      .json(booknotfound);
   }
 });
 
@@ -258,7 +292,7 @@ router.get('/isbn/:isbn', async (req, res) => {
     return res.json(book);
   } catch (err) {
     return res.status(404)
-      .json({ booknotfound: 'No books found' });
+      .json(booknotfound);
   }
 });
 
@@ -268,8 +302,8 @@ router.get('/isbn/:isbn', async (req, res) => {
  *   get:
  *     tags:
  *       - Book
- *     summary: Get books by keyword with condition
- *     description: Get book by keyword with condition. (search in book title and description with weight).
+ *     summary: Get books by keyword or isbn with condition
+ *     description: Get book by keyword or isbn with condition. (search in book title and description with weight).
  *     produces:
  *       - application/json
  *     parameters:
@@ -280,22 +314,22 @@ router.get('/isbn/:isbn', async (req, res) => {
  *         type: "string"
  *       - name: "page"
  *         in: "query"
- *         description: "the page you are query (powered by pageSize)"
- *         required: true
+ *         description: "the page you are query (powered by pageSize). Default is 1"
+ *         required: false
  *         type: "integer"
  *       - name: "pageSize"
  *         in: "query"
- *         description: "How many books you want to show in one page"
- *         required: true
+ *         description: "How many books you want to show in one page. Default is 10"
+ *         required: false
  *         type: "integer"
  *       - name: "publish"
  *         in: "query"
- *         description: "Sort result by publish date, 1 for oldest to newest, -1 for newest to oldest"
+ *         description: "Sort result by publish date, 1 for oldest to newest, -1 for newest to oldest. Default is -1"
  *         required: false
  *         type: "integer"
  *       - name: "price"
  *         in: "query"
- *         description: "Sort result by price, 1 for cheapest to most expensive, -1 for most expensive to cheapest"
+ *         description: "Sort result by price, 1 for cheapest to most expensive, -1 for most expensive to cheapest. Default is 1"
  *         required: false
  *         type: "integer"
  *     responses:
@@ -305,12 +339,17 @@ router.get('/isbn/:isbn', async (req, res) => {
  *         description: No books found with that keyword
  */
 router.get('/search/:keyword', async (req, res) => {
-  const page = parseInt(req.query.page, 10);
-  const pageSize = parseInt(req.query.pageSize, 10);
+  let page = parseInt(req.query.page, 10);
+  let pageSize = parseInt(req.query.pageSize, 10);
+  if (Number.isNaN(page)) page = 1;
+  if (Number.isNaN(pageSize)) pageSize = 10;
   // 1 for oldest to newest, -1 for newest to oldest
-  const sortByPublish = parseInt(req.query.publish, 10);
+  let sortByPublish = parseInt(req.query.publish, 10);
   // 1 for cheapest to most expensive
-  const sortByPrice = parseInt(req.query.price, 10);
+  let sortByPrice = parseInt(req.query.price, 10);
+  if (Number.isNaN(sortByPublish)) sortByPublish = -1;
+  if (Number.isNaN(sortByPrice)) sortByPrice = 1;
+
   const sortParams = {};
   if (sortByPublish) {
     sortParams.publishDate = sortByPublish;
@@ -320,16 +359,53 @@ router.get('/search/:keyword', async (req, res) => {
   }
   const interval = (page - 1) * pageSize;
   try {
+    let { keyword } = req.params;
+    const result = {};
+
+    // if query with isbn10 or isbn13.
+    if (ISBN.parse(keyword) !== null && ISBN.parse(keyword)
+      .isIsbn13()) {
+      // 978-4-87311-336-4 to 9784873113364 or 4-87311-336-4 to 9784873113364
+      keyword = ISBN.asIsbn13(keyword);
+      const book = await Book.findOne({ isbn: keyword });
+      if (book) {
+        result.currentPage = 1;
+        result.totalPages = 1;
+        result.books = [book];
+        return res.json(result);
+      } else {
+        return res.status(404)
+          .json(booknotfound);
+      }
+    }
+
     // find book with multiple conditions
-    const books = await Book.find({ $text: { $search: req.params.keyword } })
-      .cache()
+    const books = await Book.find({ $text: { $search: keyword } })
       .skip(interval)
       .limit(pageSize)
-      .sort(sortParams);
-    return res.json(books);
+      .sort(sortParams)
+      .cache()
+      .lean();
+
+    if (books.length === 0) {
+      return res.status(404)
+        .json(booknotfound);
+    }
+
+    const searchResult = await Book.find({ $text: { $search: keyword } });
+    const totalPages = Math.ceil(searchResult.length / pageSize);
+    if (page > totalPages) {
+      return res.status(404)
+        .json(bookoutofpages);
+    }
+
+    result.currentPage = page;
+    result.totalPages = totalPages;
+    result.books = books;
+    return res.json(result);
   } catch (err) {
     return res.status(404)
-      .json({ booknotfound: 'No books found' });
+      .json(booknotfound);
   }
 });
 
@@ -397,11 +473,9 @@ router.post('/',
     session: false,
   }), async (req, res) => {
     try {
-      // find out whether user is staff
-      const userIsStaff = await isStaff(req);
-      if (!userIsStaff) {
+      if (!req.user.isStaff) {
         return res.status(401)
-          .json({ unauthorized: 'Cannot modify the book' });
+          .json(unauthorized);
       }
 
       const {
@@ -424,52 +498,59 @@ router.post('/',
         authors.push({ name: req.body.authors });
       }
 
-      let newBook;
+      const isExisted = await Book.findOne({ isbn: req.body.isbn });
+      if (isExisted) {
+        return res.status(404)
+          .json(bookexisted);
+      }
+
+      const bookObj = {
+        title: req.body.title,
+        price: req.body.price,
+        stock: req.body.stock,
+        coverUrl: req.body.coverUrl,
+        description: req.body.description,
+        isbn: req.body.isbn,
+        publishDate: new Date(req.body.publishDate),
+        authors,
+      };
+
+      // find category id
       if (req.body.category) {
         const category = await Category.findById(req.body.category)
           .cache({ key: req.body.category });
-
+        // category id is invalid
         if (!category) {
-          errors.categorynotfound = 'No categories found';
           return res.status(404)
-            .json(errors);
-        } else {
-          // category exist
-          newBook = new Book({
-            category: req.body.category,
-            categoryName: category.name,
-            title: req.body.title,
-            price: req.body.price,
-            stock: req.body.stock,
-            coverUrl: req.body.coverUrl,
-            description: req.body.description,
-            isbn: req.body.isbn,
-            publishDate: new Date(req.body.publishDate),
-            authors,
-          });
+            .json(categorynotfound);
         }
+        // category exist
+        bookObj.category = req.body.category;
+        bookObj.categoryName = category.name;
       } else {
-        // create with no category
-        const emptyCategory = await Category.findOne({ slug: 'empty' })
+        // if do not provide category id, create book with empty category
+        let emptyCategory = await Category.findOne({ slug: 'empty' })
           .cache();
-        newBook = new Book({
-          category: emptyCategory._id,
-          categoryName: emptyCategory.name,
-          title: req.body.title,
-          price: req.body.price,
-          stock: req.body.stock,
-          coverUrl: req.body.coverUrl,
-          isbn: req.body.isbn,
-          description: req.body.description,
-          publishDate: new Date(req.body.publishDate),
-          authors,
-        });
+        if (!emptyCategory) {
+          // if Empty category is not exist in database, create one
+          const empty = new Category({ name: 'Empty' });
+          emptyCategory = await empty.save();
+        }
+        bookObj.category = emptyCategory._id;
+        bookObj.categoryName = emptyCategory.name;
       }
-      const book = await newBook.save();
-      return res.json(book);
+      // After construct a new book object, save it
+      const book = await new Book(bookObj).save();
+      if (book) {
+        clearAll();
+        return res.json(success);
+      } else {
+        return res.status(404)
+          .json(notsuccess);
+      }
     } catch (err) {
       return res.status(404)
-        .json(err);
+        .json(notsuccess);
     }
   });
 
@@ -503,26 +584,41 @@ router.delete('/:id',
   passport.authenticate('jwt', { session: false }),
   async (req, res) => {
     try {
-      // find out whether user is staff
-      const userIsStaff = await isStaff(req);
-      if (!userIsStaff) {
+      if (!req.user.isStaff) {
         return res.status(401)
-          .json({ unauthorized: 'Cannot modify the book' });
+          .json(unauthorized);
       }
-
-      Book.findOneAndDelete({ _id: req.params.id }, (err) => {
-        clearHash(req.params.id);
-        return err
-          ? res.status(404)
-            .json({ booknotfound: 'No books found' })
-          : res.json({ success: true });
+      // Find book in book list
+      const bookLists = await BookList.find({ 'books.bookid': req.params.id });
+      bookLists.forEach(async (bookList) => {
+        const removeIndex = bookList.books
+          .map(book => book.bookid.toString())
+          .indexOf(req.params.id);
+        bookList.books.splice(removeIndex, 1);
+        const result = await bookList.save();
+        if (!result) {
+          return res.status(404)
+            .json(notsuccess);
+        } else {
+          return true;
+        }
       });
+
+      const book = await Book.findOneAndDelete({ _id: req.params.id });
+      if (book) {
+        clearAll();
+        return res.json(success);
+      } else {
+        return res.status(404)
+          .json(notsuccess);
+      }
     } catch (err) {
-      return res.json({ success: false });
+      return res.status(404)
+        .json(notsuccess);
     }
-    return false;
   });
 
+// Calculate Book score according to each star from book reviews
 function calculateBookScore(book) {
   let totalScore = 0;
   book.reviews.map((re) => {
@@ -623,21 +719,22 @@ router.post('/review/:id',
         // calculate book score
         calculateBookScore(book);
 
-        clearHash(req.params.id);
-
         // Save
         const bookObject = await book.save();
-        return res.json(bookObject);
+        if (bookObject) {
+          clearHash(req.params.id);
+          return res.json(success);
+        } else {
+          return res.status(404)
+            .json(notsuccess);
+        }
       } else {
-        errors.reviewexist = 'Review has existed';
         return res.status(404)
-          .json(errors);
+          .json(reviewexist);
       }
     } catch (err) {
       return res.status(404)
-        .json({
-          booknotfound: 'No books found',
-        });
+        .json(booknotfound);
     }
   });
 
@@ -665,6 +762,8 @@ router.post('/review/:id',
  *     responses:
  *       200:
  *         description: Successfully removed review
+ *       401:
+ *         description: Cannot delete the review
  *       404:
  *         description: No books found or review does not exist
  *     security:
@@ -678,53 +777,99 @@ router.delete('/review/:id/:review_id',
   async (req, res) => {
     try {
       const book = await Book.findById(req.params.id);
-      if (book) {
-        Review.findOneAndDelete({ _id: req.params.review_id },
-          async (err) => {
-            if (err) {
-              return res.status(404)
-                .json({ reviewnotfound: 'No Reviews found' });
-            } else {
-              // delete review success
-              // Check to see if review exists
-              if (book.reviews.filter(review => review.reviewid.toString()
-                === req.params.review_id).length === 0) {
-                return res
-                  .status(404)
-                  .json({ reviewnotfound: 'No Reviews found' });
-              }
+      if (!book) {
+        return res.status(404)
+          .json(booknotfound);
+      }
+      const reviewObj = await Review.findOneAndDelete({ _id: req.params.review_id });
+      if (!reviewObj) {
+        return res.status(404)
+          .json(reviewnotfound);
+      }
+      // Delete review successfully
+      // Check to see if review still exists in the book object
+      if (book.reviews.filter(review => review.reviewid.toString()
+        === req.params.review_id).length === 0) {
+        return res.status(404)
+          .json(notsuccess);
+      }
 
-              // Get remove index
-              const removeIndex = book.reviews
-                .map(item => item._id.toString())
-                .indexOf(req.params.review_id);
+      // Get remove index
+      const removeIndex = book.reviews
+        .map(item => item.reviewid.toString())
+        .indexOf(req.params.review_id);
 
-              // Splice review out of array
-              book.reviews.splice(removeIndex, 1);
+      // The review is not created by current user
+      if (book.reviews[removeIndex].user.toString() !== req.user.id.toString()) {
+        return res.status(401)
+          .json(unauthorized);
+      }
 
-              if (book.reviews.length === 0) {
-                book.score = 0;
-              } else {
-                // calculate book score
-                calculateBookScore(book);
-              }
+      // Splice review out of array
+      book.reviews.splice(removeIndex, 1);
 
-              clearHash(req.params.id);
+      if (book.reviews.length === 0) {
+        book.score = 0;
+      } else {
+        // calculate book score
+        calculateBookScore(book);
+      }
 
-              const bookObject = await book.save();
-              return res.json(bookObject);
-            }
-          });
+      const bookObject = await book.save();
+      if (bookObject) {
+        clearHash(req.params.id);
+        return res.json(success);
       } else {
         return res.status(404)
-          .json({ booknotfound: 'No books found' });
+          .json(notsuccess);
       }
-      return false;
     } catch (err) {
       return res.status(404)
-        .json({ booknotfound: 'No books found' });
+        .json(notsuccess);
     }
   });
+
+function createUpdateField(req) {
+  const bookFields = {};
+  // Get fields
+  if (req.body.description) {
+    bookFields.description = req.body.description;
+  }
+  if (req.body.title) {
+    bookFields.title = req.body.title;
+  }
+  if (req.body.coverUrl) {
+    bookFields.coverUrl = req.body.coverUrl;
+  }
+  if (req.body.price) {
+    bookFields.price = Number(req.body.price);
+  }
+  if (req.body.stock) {
+    bookFields.stock = Number(req.body.stock);
+  }
+  // category id
+  if (req.body.category) {
+    bookFields.category = req.body.category;
+  }
+  if (req.body.publishDate) {
+    bookFields.publishDate = new Date(req.body.publishDate);
+  }
+  if (req.body.isbn) {
+    bookFields.isbn = req.body.isbn;
+  }
+  if (req.body.authors) {
+    bookFields.authors = [];
+    if (Array.isArray(req.body.authors)) {
+      req.body.authors.forEach((author) => {
+        bookFields.authors.unshift({ name: author });
+      });
+    } else {
+      bookFields.authors.unshift({ name: req.body.authors });
+    }
+  }
+  bookFields.updateDate = Date.now();
+  return bookFields;
+}
 
 /**
  * @swagger
@@ -761,81 +906,45 @@ router.delete('/review/:id/:review_id',
 router.post('/:id',
   passport.authenticate('jwt', { session: false }),
   async (req, res) => {
-    // find out whether user is staff
-    const userIsStaff = await isStaff(req);
-    if (!userIsStaff) {
+    if (!req.user.isStaff) {
       return res.status(401)
-        .json({ unauthorized: 'Cannot modify the book' });
+        .json(unauthorized);
     }
 
-    const bookFields = {};
-    // Get fields
-    if (req.body.description) {
-      bookFields.description = req.body.description;
-    }
-    if (req.body.title) {
-      bookFields.title = req.body.title;
-    }
-    if (req.body.price) {
-      bookFields.price = Number(req.body.price);
-    }
-    if (req.body.stock) {
-      bookFields.stock = Number(req.body.stock);
-    }
-    // category id
-    if (req.body.category) {
-      bookFields.category = req.body.category;
-    }
-    if (req.body.publishDate) {
-      bookFields.publishDate = new Date(req.body.publishDate);
-    }
-    if (req.body.isbn) {
-      bookFields.isbn = req.body.isbn;
-    }
-    if (req.body.authors) {
-      bookFields.authors = [];
-      if (Array.isArray(req.body.authors)) {
-        req.body.authors.forEach((author) => {
-          bookFields.authors.unshift({ name: author });
-        });
-      } else {
-        bookFields.authors.unshift({ name: req.body.authors });
+    const bookFields = createUpdateField(req);
+
+    try {
+      // if need to modify the category of book.
+      if (req.body.category) {
+        const category = await Category.findById(req.body.category)
+          .cache({ key: req.body.category });
+        // Category exist
+        if (category) {
+          // Update book with new category
+          bookFields.category = req.body.category;
+          bookFields.categoryName = category.name;
+        } else {
+          // category id not found
+          return res.status(404)
+            .json(categorynotfound);
+        }
       }
-    }
-    bookFields.updateDate = Date.now();
-    if (req.body.category) {
-      const category = await Category.findById(req.body.category)
-        .cache({ key: req.body.category });
-      if (category) {
-        bookFields.category = req.body.category;
-        bookFields.categoryName = category.name;
-        Book.findOneAndUpdate(
-          { _id: req.params.id },
-          bookFields,
-          { new: true },
-          (err, bookObject) => {
-            clearHash(req.params.id);
-            return err ? res.status(404)
-              .json({ booknotfound: 'No books found' }) : res.json(bookObject);
-          }
-        );
-      } else {
-        return res.status(404)
-          .json({ categorynotfound: 'No categories found' });
-      }
-    } else {
-      Book.findOneAndUpdate(
+      // Update book object with field
+      const bookObject = await Book.findOneAndUpdate(
         { _id: req.params.id },
         bookFields,
-        { new: true },
-        (err, bookObject) => {
-          clearHash(req.params.id);
-          return err ? res.status(404)
-            .json({ booknotfound: 'No books found' }) : res.json(bookObject);
-        }
+        { new: true }
       );
+      if (bookObject) {
+        clearHash(req.params.id);
+        return res.json(success);
+      } else {
+        return res.json(notsuccess);
+      }
+    } catch (e) {
+      return res.status(404)
+        .json(booknotfound);
     }
-    return false;
   });
 
 module.exports = router;

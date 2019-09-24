@@ -13,7 +13,7 @@ const styles = theme => ({
 		// The border color match the background color.
 		border: `2px solid ${
 			theme.palette.type === 'light' ? theme.palette.grey[200] : theme.palette.grey[900]
-		}`,
+			}`,
 	},
 });
 
@@ -21,13 +21,13 @@ function CustomizedBadge(props) {
 	const { classes } = props;
 
 	return (
-		<IconButton aria-label="Cart" component={Link} to={props.auth ? '/cart' : '/login'}>
+		<IconButton aria-label="Cart" component={Link} to={props.authed ? '/cart' : '/login'}>
 			{
-				props.number === 0 ? (
-					<ShoppingCartIcon style={{ color: 'white' }} />
+				props.number === 0 || !props.number ? (
+					<ShoppingCartIcon style={{ color: 'white' }}/>
 				) : (
 					<Badge badgeContent={props.number} color="primary" classes={{ badge: classes.badge }}>
-						<ShoppingCartIcon style={{ color: 'white' }} />
+						<ShoppingCartIcon style={{ color: 'white' }}/>
 					</Badge>
 				)
 			}

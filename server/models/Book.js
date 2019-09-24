@@ -3,6 +3,7 @@ const URLSlugs = require('mongoose-url-slugs');
 
 const { Schema } = mongoose;
 
+// create index in MongoDB
 mongoose.set('useCreateIndex', true);
 
 const BookSchema = new Schema({
@@ -89,12 +90,13 @@ const BookSchema = new Schema({
     max: 5,
   },
 });
+
 BookSchema.plugin(URLSlugs('title', { field: 'slug' }));
 BookSchema.index({
   title: 'text',
-  description: 'description',
+  description: 'text',
 }, {
-  weights: {
+  weights: { // name has more weights than description
     name: 5,
     description: 1,
   }

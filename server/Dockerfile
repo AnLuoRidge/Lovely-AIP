@@ -23,5 +23,6 @@ ENV REDIS_PWD ""
 ENV REDIS_URI ""
 ENV EMAIL ""
 ENV EMAIL_PWD ""
+ENV KF_EMAIL_SERVICE_PROVIDER ""
 
 CMD [ "npm", "run", "server" ]

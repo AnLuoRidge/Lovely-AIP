@@ -1,18 +1,11 @@
 const _ = require('lodash');
 const nodemailer = require('nodemailer');
-const { email, emailPwd } = require('../config/keys');
-
-// usage
-// mailer({
-//   to: 'someone@example.com',
-//   subject: 'test',
-//   text: 'something',
-// });
+const { email, emailPwd, emailServiceProvider } = require('../config/keys');
 
 const config = {
-  service: 'QQ',
-  // port: 465,
-  // secureConnection: true,
+  // or Gmail, for more Well-known services
+  // please visit https://nodemailer.com/smtp/well-known/
+  service: emailServiceProvider,
   auth: {
     user: email,
     pass: emailPwd,
@@ -30,11 +23,6 @@ const defaultMail = {
 module.exports = (mail) => {
   // default setting
   mail = _.merge({}, defaultMail, mail);
-
   // send email
-  transporter.sendMail(mail, (error, info) => {
-    if (error) return console.log(error);
-    console.log('mail sent:', info.response);
-    return false;
-  });
+  transporter.sendMail(mail);
 };

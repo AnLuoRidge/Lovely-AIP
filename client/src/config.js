@@ -1,8 +1,2 @@
-const config = {
-    DEV_API_BASE_URL: 'http://localhost:5000/api',
-    DEV_UPLOAD_BASE_URL: 'http://localhost:5000',
-    API_BASE_URL: '',
-    UPLOAD_BASE_URL: '',
-};
-
-export default config;
+export const UPLOAD_BASE_URL = process.env.NODE_ENV === 'production' ? 'http://lovelyaip-env.wsr3nv3er9.ap-southeast-2.elasticbeanstalk.com' : 'http://localhost:5000';
+export const API_BASE_URL = process.env.NODE_ENV === 'production' ? 'http://lovelyaip-env.wsr3nv3er9.ap-southeast-2.elasticbeanstalk.com/api' : 'http://localhost:5000/api';

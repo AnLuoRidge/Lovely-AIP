@@ -58,29 +58,14 @@ class FullWidthTabs extends React.Component {
 						value={this.state.value}
 						onChange={this.handleChange}
 						indicatorColor="primary"
-						// textColor="inherit"
 						style={{ color: 'white' }}
 						fullWidth
-						// scrollable
-						// scrollButtons="auto"
 					>
-						<Tab label="Home" component={Link} to="/" />
-						<Tab label="All Categories" component={Link} to="/categories" />
-						<Tab label="Recommendation" component={Link} to="/recommendation" />
-						<Tab label="Awards" style={{ outline: 'none' }} />
+						<Tab label="Home" component={Link} to="/"/>
+						<Tab label="All Categories" component={Link} to="/categories"/>
+						<Tab label="Recommended Book Lists" component={Link} to="/recommendation"/>
 					</Tabs>
 				</AppBar>
-				{/* <SwipeableViews
-          axis={theme.direction === 'rtl' ? 'x-reverse' : 'x'}
-          index={this.state.value}
-                onChangeIndex={this.handleChangeIndex}
-                style={appStyle.navigationSub}
-        >
-          <TabContainer dir={theme.direction}>  </TabContainer>
-          <TabContainer dir={theme.direction}>Item Two</TabContainer>
-          <TabContainer dir={theme.direction}>Item Three</TabContainer>
-          <TabContainer dir={theme.direction}>Item Four</TabContainer>
-        </SwipeableViews> */}
 			</div>
 		);
 	}

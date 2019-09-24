@@ -1,20 +1,24 @@
 # Server
 
-- [Set Up Environment Variable](#set-up-environment-variable)
-- [API](#api)
-    - [Using Swagger](#using-swagger)
-    - [Register](#register)
-    - [Confirm account](#confirm-account)
-    - [Login](#login)
-- [Development](#development)
-    - [Testing](#testing)
-- [Book Recommendation](#book-recommendation)
-- [Redis](#redis)
-    - [Caching Data](#caching-data)
-    - [Rate Limit](#rate-limit)
-- [Docker](#docker)
-    - [Build](#build)
-    - [Run](#run)
+- [Server](#server)
+    - [Set Up Environment Variable](#set-up-environment-variable)
+        - [Database configuration for testing](#database-configuration-for-testing)
+        - [Database configuration for testing](#database-configuration-for-testing)
+    - [API](#api)
+        - [Using Swagger](#using-swagger)
+        - [Register](#register)
+        - [Activate account](#activate-account)
+        - [Login](#login)
+    - [Development](#development)
+        - [Testing](#testing)
+    - [Book Recommendation](#book-recommendation)
+    - [Redis](#redis)
+        - [Caching Data](#caching-data)
+        - [Rate Limit](#rate-limit)
+    - [Docker](#docker)
+        - [Build](#build)
+        - [Run](#run)
+    - [RSS](#rss)
 
 ## Set Up Environment Variable
 Before start the server, you ought to set up environment variables as the following table.
@@ -27,6 +31,31 @@ Before start the server, you ought to set up environment variables as the follow
 | REDIS_URI  | { Your Redis URI } |
 | EMAIL      | { Email account that support SMTP protocol, for the usage of send validation email }   |
 | EMAIL_PWD  | { Email password } |
+
+### Database configuration for testing
+
+FYI, it will be easier for you to test this application with these database configuration.
+
+| Variable | Value |
+| --- | --- |
+| MONGO_URI | mongodb://lovely-aip:lovelyaip726@ds253871.mlab.com:53871/lovely-aip |
+| REDIS_PORT | 10813 |
+| REDIS_PWD | V49zGAlSRq3JkFL4EtTFgD5O1KtnCTUN |
+| REDIS_URI | redis-10813.c51.ap-southeast-2-1.ec2.cloud.redislabs.com |
+
+If you are using mail service rather than QQ, like Gmail or Hotmail, you should change the service name in server/utils/mailer.js Line 15.
+For more supported well-known services can be found in [Nodemailer](https://nodemailer.com/smtp/well-known/).
+
+### Database configuration for testing
+
+FYI, it will be easier for you to test this application with these database configuration.
+
+| Variable | Value |
+| --- | --- |
+| MONGO_URI | mongodb://lovely-aip:lovelyaip726@ds253871.mlab.com:53871/lovely-aip |
+| REDIS_PORT | 10813 |
+| REDIS_PWD | V49zGAlSRq3JkFL4EtTFgD5O1KtnCTUN |
+| REDIS_URI | redis-10813.c51.ap-southeast-2-1.ec2.cloud.redislabs.com |
 
 ## API
 Recommend REST API Testing Tools: [Postman](https://www.getpostman.com/) or [Restlet](https://chrome.google.com/webstore/detail/restlet-client-rest-api-t/aejoelaoggembcahagimdiliamlcdmfm).
@@ -48,7 +77,7 @@ When access some private route, you may need to add JWT to header.
 [http://localhost:5000/api/users/register](http://localhost:5000/api/users/register)
 ![register](https://ws4.sinaimg.cn/large/0069RVTdly1fuo1mr1oc8j31hu0x40z9.jpg)
 
-### Confirm account
+### Activate account
 After register a new user, the user have to activate his account via activation link in email. Or you can activate account thought the Api in the following.
 
 [http://localhost:5000/api/users/active/{activeToken}](http://localhost:5000/api/users/active/{activeToken})
@@ -67,7 +96,7 @@ Visit [http://eslint.org](http://eslint.org) for details.
 
 ### Testing
 
-This project uses [Jest](https://jestjs.io/) and [SuperTest](https://github.com/visionmedia/supertest) for testing.  
+This project uses [Jest](https://jestjs.io/) and [SuperTest](https://github.com/visionmedia/supertest) for testing.
 Visit [https://jestjs.io/](https://jestjs.io/) and [https://github.com/visionmedia/supertest](https://github.com/visionmedia/supertest) for details.
 
 To execute tests:
@@ -103,8 +132,8 @@ Redis Lab provides free Redis database with AWS region endpoint of 'ap-southeast
 ![](https://i.loli.net/2018/09/13/5b99dafd4186c.png)
 
 ### Rate Limit
-Provide ability to limit the rate of API request in a period of time.  
-In this project, APIs of 'Create User' and 'Send Validation Email' are under limitation of two requests each minute.   
+Provide ability to limit the rate of API request in a period of time.
+In this project, APIs of 'Create User' and 'Send Validation Email' are under limitation of two requests each minute.
 If reach the limitation, server will respond a status code of 429 which stands for 'Too Many Request'.
 
 Related Code can be referred to [Lovely-AIP/server/middlewares/rateLimit.js](https://github.com/Latias94/Lovely-AIP/blob/master/server/middlewares/rateLimit.js).
@@ -124,3 +153,9 @@ docker build -t server .
 ```shell
 docker run -p 5000:5000 -d --restart=always server
 ```
+
+## RSS
+Provide feeds of the newest book lists and books.
+[The Newest Book RSS](https://lovely-aip.herokuapp.com/api/feed/books)
+
+![](https://i.loli.net/2018/10/06/5bb8d65366cae.png)

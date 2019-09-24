@@ -4,6 +4,12 @@ const passport = require('passport');
 const User = require('../../models/User');
 const Book = require('../../models/Book');
 const cleanCache = require('../../middlewares/cleanCache');
+const {
+  notsuccess,
+  success,
+  usernotfound,
+  booknotfound,
+} = require('../../config/errMessage');
 const validateCartInput = require('../../validation/cart');
 
 const router = express.Router();
@@ -51,30 +57,46 @@ router.get('/', passport.authenticate('jwt', {
   try {
     const user = await User.findById(req.user.id)
       .cache({ key: req.user.id });
-    return res.json(user.cart);
-  } catch (err) {
-    res.status(404)
-      .json(err);
+
+    if (user) {
+      return res.json(user.cart);
+    } else {
+      return res.status(404)
+        .json({ usernotfound: 'User not found' });
+    }
+  } catch (e) {
+    return res.status(404)
+      .json(usernotfound);
   }
-  return false;
 });
 
 /**
  * @swagger
- * /api/cart/{id}:
+ * definitions:
+ *   AddBookToCart:
+ *     properties:
+ *       id:
+ *         type: string
+ *       quantity:
+ *         type: number
+ */
+/**
+ * @swagger
+ * /api/cart:
  *   post:
  *     tags:
  *       - Cart
- *     summary: Add one book into cart
- *     description: Add one book into cart. This can only be done by the logged in user (add JWT token to header)
+ *     summary: Add books into cart
+ *     description: Add books into cart. This can only be done by the logged in user (add JWT token to header)
  *     produces:
  *       - application/json
  *     parameters:
- *       - name: "id"
- *         in: "path"
- *         description: "id of book that want to add into cart"
+ *       - name: body
+ *         description: Add books to user cart
+ *         in: body
  *         required: true
- *         type: "string"
+ *         schema:
+ *           $ref: '#/definitions/AddBookToCart'
  *     responses:
  *       200:
  *         description: Successfully created
@@ -86,50 +108,83 @@ router.get('/', passport.authenticate('jwt', {
  *       - JWT: []
  */
 router.post(
-  '/:id',
+  '/',
   passport.authenticate('jwt', {
     session: false,
   }),
   cleanCache,
   async (req, res) => {
+    const {
+      errors,
+      isValid,
+    } = validateCartInput(req.body);
+    if (!isValid) {
+      return res.status(400)
+        .json(errors);
+    }
+
     try {
       const user = await User.findById(req.user.id);
-      const book = await Book.findById(req.params.id);
-      const newBook = {};
-      newBook.bookid = req.params.id;
-      newBook.title = book.title;
-      newBook.price = book.price;
-      newBook.coverUrl = book.coverUrl;
-      newBook.authors = book.authors;
-      newBook.quantity = 1;
-      user.cart.unshift(newBook);
-      const currentUser = await user.save();
-      return res.json(currentUser.cart);
-    } catch (err) {
+      const book = await Book.findById(req.body.id);
+
+      if (book) {
+        if (user.cart.filter(bookInCart => bookInCart.bookid.toString()
+          === req.body.id).length !== 0) {
+          // If book have existed in user cart, edit that book directly
+          const editIndex = user.cart.map(bookInCart => bookInCart.bookid.toString())
+            .indexOf(req.body.id);
+          user.cart[editIndex].quantity += req.body.quantity;
+        } else {
+          // Can not found the book in user cart, then add books into user cart
+          const newBook = {};
+          newBook.bookid = req.body.id;
+          newBook.title = book.title;
+          newBook.price = book.price;
+          newBook.coverUrl = book.coverUrl;
+          newBook.authors = book.authors;
+          newBook.quantity = req.body.quantity;
+          user.cart.unshift(newBook);
+        }
+
+        const currentUser = await user.save();
+        if (currentUser) {
+          return res.json(success);
+        }
+      }
       return res.status(404)
-        .json({
-          booknotfound: 'No books found',
-        });
+        .json(booknotfound);
+    } catch (e) {
+      return res.status(404)
+        .json(booknotfound);
     }
   }
 );
 
 /**
  * @swagger
- * /api/cart/{id}/{quantity}:
+ * definitions:
+ *   EditBookInCart:
+ *     properties:
+ *       quantity:
+ *         type: number
+ */
+/**
+ * @swagger
+ * /api/cart/{id}:
  *   post:
  *     tags:
  *       - Cart
  *     summary: Edit purchase quantity of book in cart
- *     description: Add one book into cart. This can only be done by the logged in user (add JWT token to header)
+ *     description: Edit one book into cart. This can only be done by the logged in user (add JWT token to header)
  *     produces:
  *       - application/json
  *     parameters:
- *       - name: "quantity"
- *         in: "path"
- *         description: "Purchase quantity of book"
+ *       - name: body
+ *         description: Add books to user cart
+ *         in: body
  *         required: true
- *         type: "Number"
+ *         schema:
+ *           $ref: '#/definitions/EditBookInCart'
  *     responses:
  *       200:
  *         description: Successfully edited
@@ -143,7 +198,7 @@ router.post(
  *       - JWT: []
  */
 router.post(
-  '/:id/:quantity',
+  '/:id/',
   passport.authenticate('jwt', {
     session: false,
   }),
@@ -152,38 +207,32 @@ router.post(
     const {
       errors,
       isValid,
-    } = validateCartInput(req.params);
+    } = validateCartInput(req.body);
     if (!isValid) {
       return res.status(400)
         .json(errors);
     }
-    // check quantity
-    if (req.params.quantity <= 0) {
-      errors.quantity = 'Quantity is invalid';
-      return res.status(400)
-        .json(errors);
-    }
-
     try {
       const user = await User.findById(req.user.id);
 
       if (user.cart.filter(book => book.bookid.toString()
         === req.params.id).length === 0) {
-        return res
-          .status(404)
-          .json({ booknotfound: 'No books found' });
+        return res.status(404)
+          .json(booknotfound);
       }
-      // find book index and update quantity
       const editIndex = user.cart.map(book => book.bookid.toString())
         .indexOf(req.params.id);
-      user.cart[editIndex].quantity = req.params.quantity;
+      user.cart[editIndex].quantity = req.body.quantity;
       const currentUser = await user.save();
-      return res.json(currentUser.cart);
-    } catch (err) {
+      if (currentUser) {
+        return res.json(success);
+      } else {
+        return res.status(404)
+          .json(booknotfound);
+      }
+    } catch (e) {
       return res.status(404)
-        .json({
-          booknotfound: 'No books found',
-        });
+        .json(booknotfound);
     }
   }
 );
@@ -206,7 +255,7 @@ router.post(
  *         type: "string"
  *     responses:
  *       200:
- *         description: Successfully deleted the book
+ *         description: Successfully deleted the book from cart
  *       401:
  *         description: Unauthorized
  *       404:
@@ -223,18 +272,64 @@ router.delete(
       const user = await User.findById(req.user.id);
       if (user.cart.filter(book => book.bookid.toString()
         === req.params.id).length === 0) {
-        return res
-          .status(404)
-          .json({ booknotfound: 'No books found' });
+        return res.status(404)
+          .json(booknotfound);
       }
       const editIndex = user.cart.map(book => book.bookid.toString())
         .indexOf(req.params.id);
       user.cart.splice(editIndex, 1);
       const currentUser = await user.save();
-      return res.json(currentUser.cart);
-    } catch (err) {
+      if (currentUser) {
+        return res.json(success);
+      } else {
+        return res.json(notsuccess);
+      }
+    } catch (e) {
+      return res
+        .status(404)
+        .json(booknotfound);
+    }
+  }
+);
+
+/**
+ * @swagger
+ * /api/cart:
+ *   delete:
+ *     tags:
+ *       - Cart
+ *     summary: Delete all book from cart
+ *     description: Delete all book from cart. This can only be done by the logged in user (add JWT token to header)
+ *     produces:
+ *       - application/json
+ *     responses:
+ *       200:
+ *         description: Delete all books from cart successfully
+ *       401:
+ *         description: Unauthorized
+ *       404:
+ *         description: Fail to delete all books from cart
+ *     security:
+ *       - JWT: []
+ */
+router.delete(
+  '/',
+  passport.authenticate('jwt', { session: false }),
+  cleanCache,
+  async (req, res) => {
+    try {
+      const user = await User.findById(req.user.id);
+      user.cart = [];
+      const currentUser = await user.save();
+      if (currentUser && currentUser.cart.length === 0) {
+        return res.json(success);
+      } else {
+        return res.status(404)
+          .json(notsuccess);
+      }
+    } catch (e) {
       return res.status(404)
-        .json({ booknotfound: 'No books found' });
+        .json(notsuccess);
     }
   }
 );

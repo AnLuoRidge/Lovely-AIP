@@ -2,6 +2,7 @@ const mongoose = require('mongoose');
 const redis = require('redis');
 const util = require('util');
 
+// Redis Client, for data caching
 const client = redis.createClient({
   host: require('../config/keys').redisURI,
   port: require('../config/keys').redisPort,
@@ -59,7 +60,12 @@ mongoose.Query.prototype.exec = async function (...args) {
 
 module.exports = {
   client,
+  // Delete item according to hash Key
   clearHash(hashKey) {
     client.del(JSON.stringify(hashKey));
+  },
+  // Delete everything in Redis
+  clearAll() {
+    client.flushdb((_, succeed) => console.log(`delete all cache: ${succeed}`));
   }
 };
