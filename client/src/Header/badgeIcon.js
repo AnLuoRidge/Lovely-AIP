@@ -23,10 +23,10 @@ function CustomizedBadge(props) {
 	return (
 		<IconButton aria-label="Cart" component={Link} to={props.authed ? '/cart' : '/login'}>
 			{
-				props.number === 0 || !props.number ? (
+				props.quantity === 0 || !props.quantity ? (
 					<ShoppingCartIcon style={{ color: 'white' }}/>
 				) : (
-					<Badge badgeContent={props.number} color="primary" classes={{ badge: classes.badge }}>
+					<Badge badgeContent={props.quantity} color="primary" classes={{ badge: classes.badge }}>
 						<ShoppingCartIcon style={{ color: 'white' }}/>
 					</Badge>
 				)
